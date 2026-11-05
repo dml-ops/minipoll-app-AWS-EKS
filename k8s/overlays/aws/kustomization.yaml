@@ -1,0 +1,51 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+images:
+  - name: minipoll-backend
+    newName: 040425119864.dkr.ecr.eu-north-1.amazonaws.com/minipoll-backend
+    newTag: IMAGE_TAG
+  - name: minipoll-frontend
+    newName: 040425119864.dkr.ecr.eu-north-1.amazonaws.com/minipoll-frontend
+    newTag: IMAGE_TAG
+
+patches:
+  # Ingress: use the ALB instead of nginx
+  - target: { kind: Ingress, name: minipoll }
+    patch: |-
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: minipoll
+        annotations:
+          alb.ingress.kubernetes.io/scheme: internet-facing
+          alb.ingress.kubernetes.io/target-type: ip
+          alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+          alb.ingress.kubernetes.io/healthcheck-path: /healthz
+      spec:
+        ingressClassName: alb
+
+  # Backend: talk to RDS, with SSL
+  - target: { kind: ConfigMap, name: backend-config }
+    patch: |-
+      - op: replace
+        path: /data/DB_HOST
+        value: "minipoll-pg-jj2rt.cpekoy60o0dq.eu-north-1.rds.amazonaws.com"
+      - op: replace
+        path: /data/DB_SSL
+        value: "true"
+      - op: replace
+        path: /data/ENABLE_DEBUG
+        value: "false"
+
+  # Frontend: the ALB sends traffic from inside the VPC, so allow the VPC range
+  - target: { kind: NetworkPolicy, name: allow-from-ingress-controller, namespace: frontend }
+    patch: |-
+      - op: replace
+        path: /spec/ingress/0/from
+        value:
+          - ipBlock:
+              cidr: 10.0.0.0/16

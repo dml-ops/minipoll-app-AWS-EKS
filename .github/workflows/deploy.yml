@@ -1,0 +1,60 @@
+name: Deploy minipoll to EKS
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # required for OIDC login
+  contents: read
+
+concurrency: deploy   # never run two deploys at once
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: ${{ vars.ECR_REGISTRY }}
+      TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: AWS login (OIDC, no stored keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push images
+        run: |
+          docker build -t $REGISTRY/minipoll-backend:$TAG ./backend
+          docker build -t $REGISTRY/minipoll-frontend:$TAG ./frontend
+          docker push $REGISTRY/minipoll-backend:$TAG
+          docker push $REGISTRY/minipoll-frontend:$TAG
+
+      - name: Connect to EKS
+        run: aws eks update-kubeconfig --region ${{ vars.AWS_REGION }} --name ${{ vars.EKS_CLUSTER_NAME }}
+
+      - name: Namespaces and database secret
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          kubectl apply -f k8s/base/namespaces.yaml
+          kubectl create secret generic db-credentials -n backend \
+            --from-literal=DB_USER=minipolladmin \
+            --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy
+        run: |
+          sed -i "s|IMAGE_TAG|$TAG|g" k8s/overlays/aws/kustomization.yaml
+          kubectl apply -k k8s/overlays/aws
+
+      - name: Wait for rollout (fails the pipeline if it does not succeed)
+        run: |
+          kubectl rollout status deployment/backend -n backend --timeout=300s
+          kubectl rollout status deployment/frontend -n frontend --timeout=300s
