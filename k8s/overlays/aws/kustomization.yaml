@@ -39,7 +39,7 @@ patches:
         value: "true"
       - op: replace
         path: /data/ENABLE_DEBUG
-        value: "false"
+        value: "true"
 
   # Frontend: the ALB sends traffic from inside the VPC, so allow the VPC range
   - target: { kind: NetworkPolicy, name: allow-from-ingress-controller, namespace: frontend }
