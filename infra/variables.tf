@@ -40,7 +40,7 @@ variable "domain_name" {
 variable "github_repo" {
   description = "owner/repo allowed to deploy"
   type        = string
-  default     = "dml-ops/minipoll-app-AWS-EKS"
+  default     = "dml-ops@267247411/minipoll-app-AWS-EKS@1441956777"
 }
 
 variable "alb_dns_name" {
