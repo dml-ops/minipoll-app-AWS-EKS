@@ -46,5 +46,5 @@ variable "github_repo" {
 variable "alb_dns_name" {
   description = "DNS name of the load balancer, filled in during Part 7"
   type        = string
-  default     = ""
+  default     = "k8s-frontend-minipoll-fd3aa192f3-1928192349.eu-north-1.elb.amazonaws.com"
 }
